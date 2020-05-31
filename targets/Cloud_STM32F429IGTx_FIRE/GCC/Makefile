@@ -17,8 +17,7 @@ TARGET = Huawei_LiteOS
 # debug build?
 DEBUG = 1
 # optimization
-OPT = -O0 -g
-
+OPT = -Og
 
 USE_OTA := no
 OTA_IS_NEED_DTLS := no
@@ -50,7 +49,7 @@ HEX       = $(OBJCOPY) -O ihex
 BIN       = $(OBJCOPY) -O binary -S
 
 
-PROJECTBASE = $(PWD)
+PROJECTBASE = $(CURDIR)
 override PROJECTBASE    := $(abspath $(PROJECTBASE))
 TOP_DIR = $(PROJECTBASE)/../../..
 
@@ -63,33 +62,6 @@ PERIFLIB_PATH =
 
 # Build path
 BUILD_DIR = build
-
-
-######################################
-#common variables for other module or components
-C_SOURCES =
-C_DEFS =
-C_INCLUDES =
-LDFLAGS =
-
-######################################
-
-###############LOAD MQTT###############
-#load the mqtt if enabled
-ifeq ($(WITH_MQTT), yes)
-
-#LOAD THE MQTT LIB
-include $(TOP_DIR)/components/mqtt/mqtt.mk
-#LOAD THE ATINY_MQTT
-include $(TOP_DIR)/components/connectivity/agent_tiny/atiny_mqtt/atiny_mqtt.mk
-#LOAD THE ATINY_MQTT_DEMO
-include $(TOP_DIR)/demos/agenttiny_mqtt/atiny_mqtt_demo.mk
-#FLASH FOR THE ATINY MQTT DYNATIC MODE
-C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/flash_adaptor.c
-
-endif
-
-######################################
 
 ######################################
 # source
@@ -120,14 +92,20 @@ HAL_DRIVER_SRC =  \
 HARDWARE_SRC =  \
         ${wildcard $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Hardware/Src/*.c}
         C_SOURCES += $(HARDWARE_SRC)
-		
+
 ifeq ($(USE_BOOTLOADER), no)
+
 HAL_DRIVER_SRC_NO_BOOTLOADER =  \
 		$(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c \
 		$(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma_ex.c \
 		$(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_eth.c \
         $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rng.c
 		C_SOURCES += $(HAL_DRIVER_SRC_NO_BOOTLOADER)
+
+LIBSEC_SRC = \
+        ${wildcard $(TOP_DIR)/components/lib/libsec/src/*.c}
+        C_SOURCES += $(LIBSEC_SRC)
+
 KERNEL_SRC =  \
         ${wildcard $(TOP_DIR)/kernel/*.c} \
         ${wildcard $(TOP_DIR)/kernel/base/core/*.c} \
@@ -136,7 +114,9 @@ KERNEL_SRC =  \
         ${wildcard $(TOP_DIR)/kernel/base/mem/membox/*.c} \
         ${wildcard $(TOP_DIR)/kernel/base/mem/common/*.c} \
         ${wildcard $(TOP_DIR)/kernel/base/misc/*.c} \
+        ${wildcard $(TOP_DIR)/kernel/base/mp/*.c} \
         ${wildcard $(TOP_DIR)/kernel/base/om/*.c} \
+        ${wildcard $(TOP_DIR)/kernel/base/sched/sched_sq/*.c} \
         ${wildcard $(TOP_DIR)/kernel/extended/tickless/*.c}
         C_SOURCES += $(KERNEL_SRC)
 
@@ -144,11 +124,20 @@ CMSIS_SRC =  \
         ${wildcard $(TOP_DIR)/osdepends/liteos/cmsis/*.c}
         C_SOURCES += $(CMSIS_SRC)
 
+BSP_SRC = \
+        ${wildcard $(TOP_DIR)/targets/bsp/common/*.c} 
+BSP_SRC_EXCLUDE = \
+        $(TOP_DIR)/targets/bsp/common/console.c \
+        $(TOP_DIR)/targets/bsp/common/virtual_serial.c
+BSP_SRC := $(filter-out $(BSP_SRC_EXCLUDE), $(BSP_SRC))
+        C_SOURCES += $(BSP_SRC)
+
 ARCH_SRC =  \
-        ${wildcard $(TOP_DIR)/arch/arm/arm-m/src/*.c} \
-        ${wildcard $(TOP_DIR)/arch/arm/arm-m/cortex-m4/*.c}
+        ${wildcard $(TOP_DIR)/arch/common/*.c} \
+        ${wildcard $(TOP_DIR)/arch/arm/cortex-m/src/*.c} \
+        ${wildcard $(TOP_DIR)/arch/arm/cortex-m/cortex-m4/*.c}
         C_SOURCES += $(ARCH_SRC)
-		
+
 ifeq ($(WITH_LWIP), yes)
 LWIP_SRC =  \
         ${wildcard $(TOP_DIR)/components/net/lwip/lwip-2.0.3/src/api/*.c} \
@@ -195,14 +184,12 @@ else
 			$(TOP_DIR)/components/connectivity/agent_tiny/atiny_lwm2m/firmware_update.c, $(ATINY_TINY_SRC))
 	C_SOURCES += $(ATINY_TINY_SRC_NO_FOTA)
 endif
-		
+
 AGENT_DEMO_SRC = \
         ${wildcard $(TOP_DIR)/demos/agenttiny_lwm2m/*.c}
         C_SOURCES += $(AGENT_DEMO_SRC)
 
 endif
-
-
 
 OS_DEPENDS_SRC = \
         ${wildcard $(TOP_DIR)/osdepends/liteos/*.c}
@@ -217,11 +204,30 @@ NEWLIB_SRC = \
         ${wildcard $(TOP_DIR)/components/lib/libc/newlib_stub.c} \
 	${wildcard $(TOP_DIR)/components/lib/libc/errno.c}
         C_SOURCES += $(NEWLIB_SRC)
-		
+
 
 ATINY_LOG = \
         ${wildcard $(TOP_DIR)/components/log/*.c}
         C_SOURCES += $(ATINY_LOG)
+
+
+ifeq ($(WITH_MQTT), yes)
+MQTT_SRC = \
+        ${wildcard $(TOP_DIR)/components/connectivity/mqtt/MQTTPacket/src/*.c} \
+        $(TOP_DIR)/components/connectivity/mqtt/MQTTClient-C/src/MQTTClient.c \
+        $(TOP_DIR)/components/connectivity/mqtt/MQTTClient-C/src/liteOS/MQTTliteos.c
+        C_SOURCES += $(MQTT_SRC)
+ATINY_TINY_MQTT_SRC = \
+        ${wildcard $(TOP_DIR)/components/connectivity/agent_tiny/atiny_mqtt/*.c}
+        C_SOURCES += $(ATINY_TINY_MQTT_SRC)
+AGENT_DEMO_MQTT_SRC = \
+        ${wildcard $(TOP_DIR)/demos/agenttiny_mqtt/*.c}
+        C_SOURCES += $(AGENT_DEMO_MQTT_SRC)
+CJSON_SRC = \
+        ${wildcard $(TOP_DIR)/components/lib/cJSON/cJSON.c}
+        C_SOURCES += $(CJSON_SRC)
+        C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/flash_adaptor.c
+endif
 
 ifeq ($(WITH_FILESYSTEM), yes)
 FS_SRC = \
@@ -282,6 +288,7 @@ endif
 endif
 
 USER_SRC =  \
+        $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/os_adapt/os_adapt.c \
         $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/main.c \
         $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/system_stm32f4xx.c \
         $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/usart.c \
@@ -290,7 +297,10 @@ USER_SRC =  \
         $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/sys_init.c \
         $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/user_task.c
         C_SOURCES += $(USER_SRC)
-        
+
+
+
+
 ifeq ($(WITH_AT_FRAMEWORK), yes)
 AT_FRAME_SRC = \
     ${wildcard $(TOP_DIR)/components/net/at_frame/*.c} \
@@ -337,13 +347,13 @@ ifeq ($(USE_OTA), yes)
 OTA_SRC = \
     ${wildcard  $(TOP_DIR)/components/ota/flag_operate/*.c} \
     ${wildcard  $(TOP_DIR)/components/ota/package/*.c} \
-	${wildcard  $(TOP_DIR)/components/ota/utility/*.c}
+    ${wildcard  $(TOP_DIR)/components/ota/utility/*.c}
     C_SOURCES += $(OTA_SRC)
-C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/board.c
-C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/ota_port.c
-#MQTT has add flash_adaptor.c 
+    C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/board.c
+    C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/ota_port.c
+#MQTT has add flash_adaptor.c
 ifneq ($(WITH_MQTT), yes)
-C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/flash_adaptor.c
+    C_SOURCES += $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Src/flash_adaptor.c
 endif
 endif
 
@@ -351,10 +361,10 @@ endif
 # ASM sources
 
 ASM_SOURCES_S =  \
-        ${wildcard $(TOP_DIR)/arch/arm/arm-m/cortex-m4/gcc/los_dispatch_gcc.S}
+        ${wildcard $(TOP_DIR)/arch/arm/cortex-m/cortex-m4/gcc/*.S}
 
 #blow use bootloader
-else 
+else
 
 FLAG_SRC = \
         ${wildcard $(TOP_DIR)/components/ota/flag_operate/*.c}
@@ -393,7 +403,7 @@ MCU = $(CPU) -mthumb $(FPU) $(FLOAT-ABI)
 AS_DEFS =
 
 # C defines
-C_DEFS +=  \
+C_DEFS =  \
         -D USE_HAL_DRIVER \
         -D STM32F429xx \
         -D NDEBUG
@@ -424,7 +434,7 @@ endif
 ifeq ($(WITH_LWIP), yes)
 		C_DEFS += \
 			-DWITH_LWIP \
-			-D LWIP_TIMEVAL_PRIVATE=0 
+			-D LWIP_TIMEVAL_PRIVATE=0
 
 	ifeq ($(USE_LWIP_TCP), yes)
 		C_DEFS += -DLWIP_TCP=1
@@ -479,6 +489,10 @@ ifeq ($(WITH_FILESYSTEM), yes)
 endif
 
 
+ifeq ($(WITH_MQTT), yes)
+C_DEFS += -DWITH_MQTT
+endif
+
 ifeq ($(WITH_IPV4), no)
 C_DEFS += -DLWIP_IPV4=0
 else
@@ -499,14 +513,14 @@ HAL_DRIVER_INC = \
         -I $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Drivers/STM32F4xx_HAL_Driver/Inc \
         -I $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Drivers/STM32F4xx_HAL_Driver/Inc/Legacy
         C_INCLUDES += $(HAL_DRIVER_INC)
-		
+
 INCLUDE_INC = \
         -I $(TOP_DIR)/include
         C_INCLUDES += $(INCLUDE_INC)
-		
+
 LWM2M_ATINY_INC = \
-        -I $(TOP_DIR)/components/connectivity/agent_tiny/atiny_lwm2m        
-        C_INCLUDES += $(LWM2M_ATINY_INC)		
+        -I $(TOP_DIR)/components/connectivity/agent_tiny/atiny_lwm2m
+        C_INCLUDES += $(LWM2M_ATINY_INC)
 
 HARDWARE_INC = \
         -I $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/Hardware/Inc
@@ -524,30 +538,37 @@ OTA_INC = \
 endif
 
 CMSIS_INC = \
-		-I $(TOP_DIR)/arch/arm/arm-m/include \
         -I $(TOP_DIR)/arch/arm/common/cmsis
         C_INCLUDES += $(CMSIS_INC)
 
 LITEOS_CMSIS = \
         -I $(TOP_DIR)/osdepends/liteos/cmsis
         C_INCLUDES += $(LITEOS_CMSIS)
-		
-ifeq ($(USE_BOOTLOADER), no)	
-OS_CONFIG_INC = \
-		-I $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/OS_CONFIG
-		C_INCLUDES += $(OS_CONFIG_INC)
+
+ifeq ($(USE_BOOTLOADER), no)
+BSP_INC = \
+        -I $(TOP_DIR)/targets/bsp/common \
+        -I $(TOP_DIR)/targets/bsp/include \
+        -I $(TOP_DIR)/targets/bsp/hw/include \
+        -I $(TOP_DIR)/targets/Cloud_STM32F429IGTx_FIRE/include
+        C_INCLUDES += $(BSP_INC)
+
 KERNEL_INC = \
+        -I $(TOP_DIR)/kernel/base/include \
+        -I $(TOP_DIR)/kernel/extended/include \
         -I $(TOP_DIR)/kernel/include \
-	-I $(TOP_DIR)/kernel/base/include \
-	-I $(TOP_DIR)/kernel/extended/include
+        -I $(TOP_DIR)/components/lib/libsec/include
         C_INCLUDES += $(KERNEL_INC)
 
 ARCH_INC = \
-        -I $(TOP_DIR)/arch/arm/arm-m/include \
-        -I $(TOP_DIR)/arch/arm/arm-m/cortex-m4
+        -I $(TOP_DIR)/arch/common \
+        -I $(TOP_DIR)/arch/arm/include \
+        -I $(TOP_DIR)/arch/arm/cortex-m/include \
+        -I $(TOP_DIR)/arch/arm/cortex-m/src/include \
+        -I $(TOP_DIR)/arch/arm/cortex-m/cortex-m4/include
         C_INCLUDES += $(ARCH_INC)
 
-	
+
 ifeq ($(WITH_LWIP), yes)
 LWIP_INC = \
         -I $(TOP_DIR)/components/net/lwip/lwip-2.0.3/src/include
@@ -580,9 +601,21 @@ LWM2M_INC = \
 endif
 
 
+
+ifeq ($(WITH_MQTT), yes)
+MQTT_INC = \
+        -I $(TOP_DIR)/components/connectivity/mqtt/MQTTClient-C/src \
+        -I $(TOP_DIR)/components/connectivity/mqtt/MQTTClient-C/src/liteOS \
+		-I $(TOP_DIR)/components/connectivity/mqtt/MQTTPacket/src \
+		-I $(TOP_DIR)/components/lib/cJSON
+        C_INCLUDES += $(MQTT_INC)
+endif
+
 DEMO_INC = \
         -I $(TOP_DIR)/demos
         C_INCLUDES += $(DEMO_INC)
+
+
 
 ifeq ($(WITH_FILESYSTEM), yes)
 FS_SPIFFS_INC = \
@@ -609,6 +642,13 @@ CMOCKERY_TEST_INC = \
         C_INCLUDES += $(CMOCKERY_TEST_INC)
 endif
 
+ifeq ($(WITH_LITEOS_TEST), yes)
+include test_liteos.mk
+else
+C_DEFS += \
+        -DLOSCFG_PLATFORM_OSAPPINIT
+endif
+
 #below use bootloader
 else
 FLAG_INC = \
@@ -617,12 +657,24 @@ FLAG_INC = \
         C_INCLUDES += $(FLAG_INC)
 endif
 
+############################# Security Option Begin #############################
+LITEOS_SSP = -fno-stack-protector
+ifeq ($(LOSCFG_CC_STACKPROTECTOR), y)
+     LITEOS_SSP = -fstack-protector --param ssp-buffer-size=4
+endif
 
+ifeq ($(LOSCFG_CC_STACKPROTECTOR_STRONG), y)
+    LITEOS_SSP = -fstack-protector-strong
+endif
+ifeq ($(LOSCFG_CC_STACKPROTECTOR_ALL), y)
+    LITEOS_SSP = -fstack-protector-all
+endif
+############################# Security Option End ##############################
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
 
-CFLAGS = $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+CFLAGS = $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) $(LITEOS_SSP) -Wall -fdata-sections -ffunction-sections
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
@@ -653,7 +705,7 @@ ifeq ($(USE_OTA), yes)
 LIBS += -lhwpatch
 endif
 LIBDIR = -L$(PROJECTBASE)/../Lib
-LDFLAGS += $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
+LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
 
 ifeq ($(WITH_MQTT), yes)
 LDFLAGS += -u _printf_float

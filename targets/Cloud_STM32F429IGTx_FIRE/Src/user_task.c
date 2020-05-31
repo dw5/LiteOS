@@ -51,14 +51,17 @@
 static UINT32 g_atiny_tskHandle;
 static UINT32 g_fs_tskHandle;
 
+
+
+
+
 void atiny_task_entry(void)
 {
-    extern void agent_tiny_entry();
+    extern void agent_tiny_entry(void);
 #if defined(WITH_LINUX) || defined(WITH_LWIP)
     hieth_hw_init();
     net_init();
 #elif defined(WITH_AT_FRAMEWORK)
-
 
     #if defined(USE_ESP8266)
     extern at_adaptor_api esp8266_interface;
@@ -90,12 +93,6 @@ void atiny_task_entry(void)
 #else
 #endif
 
-
-#if !defined(USE_NB_NEUL95_NO_ATINY)
-#ifdef CONFIG_FEATURE_FOTA
-    hal_init_ota();
-#endif
-
 #ifdef WITH_MQTT
     flash_adaptor_init();
     {
@@ -105,10 +102,13 @@ void atiny_task_entry(void)
                                    .read_flash_info = flash_adaptor_read_mqtt_info};
         agent_tiny_demo_init(&demo_param);
     }
-    extern  int mqtt_lib_load();
-    mqtt_lib_load();
 #endif
 
+
+#if !defined(USE_NB_NEUL95_NO_ATINY)
+#ifdef CONFIG_FEATURE_FOTA
+    hal_init_ota();
+#endif
     agent_tiny_entry();
 #endif
 }
@@ -185,21 +185,21 @@ uint32_t create_dtls_server_task()
 #endif
 
 
-UINT32 create_work_tasks(VOID)
+UINT32 app_init(VOID)
 {
     UINT32 uwRet = LOS_OK;
 
     uwRet = creat_agenttiny_task();
     if (uwRet != LOS_OK)
     {
-    	return LOS_NOK;
+        return LOS_NOK;
     }
 
 #if defined(FS_SPIFFS) || defined(FS_FATFS)
     uwRet = creat_fs_task();
     if (uwRet != LOS_OK)
     {
-    	return LOS_NOK;
+        return LOS_NOK;
     }
 #endif
 
@@ -211,12 +211,11 @@ UINT32 create_work_tasks(VOID)
     task_create("main_ppp", main_ppp, 0x1500, NULL, NULL, 2);
 #endif
 
-
 #if defined(WITH_DTLS) && defined(SUPPORT_DTLS_SRV)
-    uwRet = create_dtls_server_task()
+    uwRet = create_dtls_server_task();
     if (uwRet != LOS_OK)
     {
-    	return LOS_NOK;
+        return LOS_NOK;
     }
 #endif
 
